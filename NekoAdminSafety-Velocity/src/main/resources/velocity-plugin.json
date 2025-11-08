@@ -1,0 +1,10 @@
+name: "NekoAdminSafety-Velocity"
+id: nekoadminsafety
+version: "1.0-SNAPSHOT"
+description: "NekoAdminSafety的Velocity端插件，用于拦截代理端指令"
+authors: ["不穿胖次の小奶猫"]
+main: neko.nekoadminsafety.velocity.NekoAdminSafetyVelocity
+dependencies:
+  - name: "velocity"
+    version: "3.0.0"
+    required: true

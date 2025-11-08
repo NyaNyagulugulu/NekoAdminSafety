@@ -1,0 +1,32 @@
+# NekoAdminSafety 配置文件
+
+# 是否启用指令拦截功能
+enabled: true
+
+# 要拦截的指令列表
+blocked-commands:
+  - "lpv"
+  - "send"
+  - "server"
+  - "end"
+  - "connect"
+  - "gconnect"
+  - "bukkit:version"
+  - "version"
+
+# 拦截时发送给玩家的消息
+intercept-message: "§c§l[NekoAdminSafety] §f该指令已被服务器拦截，您无权执行此操作。"
+
+# 是否记录拦截日志
+log-interceptions: true
+
+# 是否启用VC端通信拦截
+enable-vc-interception: true
+
+# 要拦截的插件消息通道
+blocked-channels:
+  - "BungeeCord"
+  - "bungeecord:main"
+  - "velocity:main"
+  - "fml:hs"
+  - "minecraft:brand"
