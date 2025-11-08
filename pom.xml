@@ -20,7 +20,7 @@
     </properties>
 
     <modules>
-        <module>NekoAdminSafety</module>
+<!--        <module>NekoAdminSafety</module>-->
         <module>NekoAdminSafety-Velocity</module>
     </modules>
 
@@ -73,7 +73,7 @@
                 <activeByDefault>true</activeByDefault>
             </activation>
             <modules>
-                <module>NekoAdminSafety</module>
+<!--                <module>NekoAdminSafety</module>-->
                 <module>NekoAdminSafety-Velocity</module>
             </modules>
         </profile>

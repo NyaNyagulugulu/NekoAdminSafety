@@ -1,0 +1,24 @@
+# NekoAdminSafety Velocity端配置文件
+# 用于配置需要拦截指令的服务器
+
+# 需要拦截指令的服务器列表
+# 在这些服务器中，所有配置的指令将被拦截
+intercepted-servers:
+  - "login"
+
+# 要拦截的指令列表
+blocked-commands:
+  - "lpv"
+  - "send"
+  - "server"
+  - "end"
+  - "connect"
+  - "gconnect"
+  - "bukkit:version"
+  - "version"
+
+# 拦截时发送给玩家的消息
+intercept-message: "§c§l[NekoAdminSafety] §f该指令已被服务器拦截，您无权执行此操作。"
+
+# 是否记录拦截日志
+log-interceptions: true
