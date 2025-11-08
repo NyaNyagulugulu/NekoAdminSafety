@@ -1,14 +1,12 @@
 package neko.nekoadminsafety.velocity;
 
 import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.connection.PluginMessageEvent;
+import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -58,33 +56,66 @@ public class VelocityCommunicationHandler {
         plugin.getLogger().info("Velocity端通信通道已注销");
     }
     
+    // 监听命令执行事件
+    @Subscribe
+    public void onCommandExecute(CommandExecuteEvent event) {
+        if (!(event.getCommandSource() instanceof Player)) {
+            return;
+        }
+        
+        Player player = (Player) event.getCommandSource();
+        String command = event.getCommand().toLowerCase();
+        
+        // 检查命令是否在拦截列表中
+        List<String> allBlockedCommands = new ArrayList<>(blockedCommands);
+        allBlockedCommands.addAll(plugin.getBlockedCommands());
+        
+        if (allBlockedCommands.contains(command.split(" ")[0])) {
+            // 取消命令执行
+            event.setResult(CommandExecuteEvent.CommandResult.denied());
+            
+            // 发送拦截消息给玩家
+            player.sendMessage(
+                net.kyori.adventure.text.Component.text("§c§l[NekoAdminSafety] §f该指令已被服务器拦截，您无权执行此操作。")
+            );
+            
+            // 记录拦截日志
+            plugin.getLogger().info("拦截了玩家 " + player.getUsername() + " 执行的命令: /" + command);
+            
+            // 发送拦截确认到Bukkit端
+            sendInterceptConfirmation(command, player.getUsername());
+        }
+    }
+    
     // 发送拦截消息到Bukkit端插件
-    public void sendInterceptMessage(String command, String player) {
-        // 向所有服务器发送消息
-        for (var server : plugin.getServer().getAllServers()) {
-            try {
-                ByteArrayOutputStream b = new ByteArrayOutputStream();
-                DataOutputStream out = new DataOutputStream(b);
-                
-                out.writeUTF("velocity_intercept");
-                out.writeUTF(command);
-                out.writeUTF(player);
-                
+    public void sendInterceptConfirmation(String command, String player) {
+        try {
+            ByteArrayOutputStream b = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(b);
+            
+            out.writeUTF("velocity_intercept");
+            out.writeUTF(command);
+            out.writeUTF(player);
+            
+            // 向所有服务器发送消息
+            for (var server : plugin.getServer().getAllServers()) {
                 server.sendPluginMessage(
                     MinecraftChannelIdentifier.from("neko:adminsafe"), 
                     b.toByteArray()
                 );
-                
-                plugin.getLogger().info("已向后端服务器发送拦截消息: " + command);
-            } catch (IOException e) {
-                plugin.getLogger().error("发送拦截消息时出错: " + e.getMessage());
             }
+            
+            plugin.getLogger().info("已向Bukkit端发送拦截确认消息: " + command);
+        } catch (IOException e) {
+            plugin.getLogger().error("发送拦截确认消息时出错: " + e.getMessage());
         }
     }
     
     // 检查命令是否被拦截
     public boolean isBlockedCommand(String command) {
-        return blockedCommands.contains(command.toLowerCase());
+        List<String> allBlockedCommands = new ArrayList<>(blockedCommands);
+        allBlockedCommands.addAll(plugin.getBlockedCommands());
+        return allBlockedCommands.contains(command.toLowerCase());
     }
     
     public NekoAdminSafetyVelocity getPlugin() {

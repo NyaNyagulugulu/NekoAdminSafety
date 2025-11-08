@@ -6,7 +6,13 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerCommandSendEvent;
 import org.bukkit.plugin.messaging.PluginMessageListener;
+import org.bukkit.scheduler.BukkitRunnable;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -17,6 +23,14 @@ public class ComprehensiveInterceptor implements Listener, PluginMessageListener
     public ComprehensiveInterceptor(NekoAdminSafety plugin) {
         this.plugin = plugin;
         initializeBlockedChannels();
+        
+        // 延迟发送配置到Velocity端
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                sendConfigToVelocity();
+            }
+        }.runTaskLater(plugin, 20L); // 延迟1秒发送
     }
     
     private void initializeBlockedChannels() {
@@ -54,102 +68,9 @@ public class ComprehensiveInterceptor implements Listener, PluginMessageListener
             if (plugin.getConfig().getBoolean("log-interceptions", true)) {
                 plugin.getLogger().info("拦截了玩家 " + player.getName() + " 执行的命令: /" + message);
             }
-        }
-    }
-    
-    @EventHandler
-    public void onPlayerCommandSend(PlayerCommandSendEvent event) {
-        // 检查是否启用拦截功能
-        if (!plugin.getConfig().getBoolean("enabled", true)) {
-            return;
-        }
-        
-        // 获取配置中的拦截命令列表
-        List<String> blockedCommands = plugin.getConfig().getStringList("blocked-commands");
-        
-        // 从可用命令列表中移除被拦截的命令
-        event.getCommands().removeIf(command -> 
-            isBlockedCommand(command.toLowerCase(), blockedCommands)
-        );
-    }
-    
-    // 实现PluginMessageListener接口来拦截插件消息
-    @Override
-    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        // 检查是否启用拦截功能
-        if (!plugin.getConfig().getBoolean("enabled", true) || 
-            !plugin.getConfig().getBoolean("enable-vc-interception", true)) {
-            return;
-        }
-        
-        // 检查是否是需要拦截的通道
-        if (isBlockedChannel(channel)) {
-            // 记录拦截日志
-            if (plugin.getConfig().getBoolean("log-interceptions", true)) {
-                plugin.getLogger().info("拦截了玩家 " + player.getName() + " 发送到通道 " + channel + " 的消息");
-            }
             
-            // 发送拦截消息给玩家
-            String interceptMessage = plugin.getConfig().getString("intercept-message", "§c§l[NekoAdminSafety] §f该指令已被服务器拦截，您无权执行此操作。");
-            player.sendMessage(interceptMessage);
-        }
-    }
-    
-    private boolean isBlockedCommand(String command, List<String> blockedCommands) {
-        // 检查是否是直接匹配的命令
-        return blockedCommands.contains(command);
-    }
-    
-    private boolean isBlockedChannel(String channel) {
-        // 检查是否是需要拦截的通道
-        return blockedChannels.contains(channel);
-    }
-
-
-public class ComprehensiveInterceptor implements Listener, PluginMessageListener {
-    private final NekoAdminSafety plugin;
-    private List<String> blockedChannels;
-    
-    public ComprehensiveInterceptor(NekoAdminSafety plugin) {
-        this.plugin = plugin;
-        initializeBlockedChannels();
-    }
-    
-    private void initializeBlockedChannels() {
-        // 从配置文件加载需要拦截的通道列表
-        blockedChannels = new ArrayList<>(plugin.getConfig().getStringList("blocked-channels"));
-    }
-    
-    @EventHandler
-    public void onPlayerCommandPreprocess(PlayerCommandPreprocessEvent event) {
-        // 检查是否启用拦截功能
-        if (!plugin.getConfig().getBoolean("enabled", true)) {
-            return;
-        }
-        
-        Player player = event.getPlayer();
-        
-        // 获取命令（去除开头的/）
-        String message = event.getMessage().substring(1);
-        String[] parts = message.split(" ");
-        String command = parts[0].toLowerCase();
-        
-        // 获取配置中的拦截命令列表
-        List<String> blockedCommands = plugin.getConfig().getStringList("blocked-commands");
-        
-        // 检查是否是需要拦截的命令
-        if (isBlockedCommand(command, blockedCommands)) {
-            // 取消命令执行
-            event.setCancelled(true);
-            
-            // 发送拦截消息给玩家
-            String interceptMessage = plugin.getConfig().getString("intercept-message", "§c§l[NekoAdminSafety] §f该指令已被服务器拦截，您无权执行此操作。");
-            player.sendMessage(interceptMessage);
-            
-            // 记录拦截日志
-            if (plugin.getConfig().getBoolean("log-interceptions", true)) {
-                plugin.getLogger().info("拦截了玩家 " + player.getName() + " 执行的命令: /" + message);
-            }
+            // 向Velocity端发送拦截确认消息
+            sendInterceptConfirmationToVelocity(command, player.getName());
         }
     }
     
@@ -215,6 +136,11 @@ public class ComprehensiveInterceptor implements Listener, PluginMessageListener
                     String playerName = in.readUTF();
                     plugin.getLogger().info("收到来自VC端插件的拦截确认: " + command + " 由玩家 " + playerName + " 尝试执行");
                     break;
+                case "velocity_intercept":
+                    String interceptedCommand = in.readUTF();
+                    String interceptedPlayer = in.readUTF();
+                    plugin.getLogger().info("收到来自Velocity端的拦截确认: " + interceptedCommand + " 由玩家 " + interceptedPlayer + " 尝试执行");
+                    break;
                 default:
                     plugin.getLogger().info("收到来自VC端插件的未知消息类型: " + type);
                     break;
@@ -222,6 +148,63 @@ public class ComprehensiveInterceptor implements Listener, PluginMessageListener
         } catch (IOException e) {
             plugin.getLogger().severe("处理来自VC端插件的消息时出错: " + e.getMessage());
         }
+    }
+    
+    // 向Velocity端发送拦截确认消息
+    private void sendInterceptConfirmationToVelocity(String command, String playerName) {
+        Player player = getFirstOnlinePlayer();
+        if (player == null) {
+            return;
+        }
+        
+        try {
+            ByteArrayOutputStream b = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(b);
+            
+            out.writeUTF("bukkit_intercept");
+            out.writeUTF(command);
+            out.writeUTF(playerName);
+            
+            player.sendPluginMessage(plugin, "neko:adminsafe", b.toByteArray());
+        } catch (IOException e) {
+            plugin.getLogger().severe("发送拦截确认消息到Velocity端时出错: " + e.getMessage());
+        }
+    }
+    
+    // 向Velocity端发送配置信息
+    private void sendConfigToVelocity() {
+        Player player = getFirstOnlinePlayer();
+        if (player == null) {
+            return;
+        }
+        
+        try {
+            ByteArrayOutputStream b = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(b);
+            
+            out.writeUTF("config_update");
+            
+            // 获取配置中的拦截命令列表
+            List<String> blockedCommands = plugin.getConfig().getStringList("blocked-commands");
+            out.writeInt(blockedCommands.size());
+            
+            for (String command : blockedCommands) {
+                out.writeUTF(command);
+            }
+            
+            player.sendPluginMessage(plugin, "neko:adminsafe", b.toByteArray());
+            plugin.getLogger().info("已向Velocity端发送配置信息，包含 " + blockedCommands.size() + " 个拦截指令");
+        } catch (IOException e) {
+            plugin.getLogger().severe("发送配置信息到Velocity端时出错: " + e.getMessage());
+        }
+    }
+    
+    // 获取第一个在线玩家
+    private Player getFirstOnlinePlayer() {
+        if (plugin.getServer().getOnlinePlayers().isEmpty()) {
+            return null;
+        }
+        return plugin.getServer().getOnlinePlayers().iterator().next();
     }
     
     private boolean isBlockedCommand(String command, List<String> blockedCommands) {
@@ -261,5 +244,4 @@ public class ComprehensiveInterceptor implements Listener, PluginMessageListener
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, "neko:adminsafe", this);
         plugin.getServer().getMessenger().unregisterOutgoingPluginChannel(plugin, "neko:adminsafe");
     }
-}
 }
